@@ -1,0 +1,1 @@
+Sample 1, T1 => reg: 0.01 fwhm: 40 dice CSF: 0.79344 dice GM: 0.75415 dice WM: 0.827Sample 1, T1 => reg: 0.01 fwhm: 60 dice CSF: 0.79259 dice GM: 0.75373 dice WM: 0.8273Sample 1, T1 => reg: 0.01 fwhm: 100 dice CSF: 0.79272 dice GM: 0.75319 dice WM: 0.8276Sample 1, T1 => reg: 0.01 fwhm: 130 dice CSF: 0.79265 dice GM: 0.75262 dice WM: 0.82725

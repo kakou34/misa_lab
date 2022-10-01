@@ -1,4 +1,4 @@
-function output = spm_seg(structural_fn)
+function output = spm_seg(structural_fn, bias_reg, bias_fwhm)
 % Function to segment T1 MRI data from a single subject using Matlab/SPM12.
 
 % Steps include coregistering structural image to first functional image,
@@ -23,9 +23,9 @@ segmentation = struct;
 % Channel
 
 %% Segmentation
-segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasreg = 0.001;
-segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasfwhm = 60;
-segmentation.matlabbatch{1}.spm.spatial.preproc.channel.write = [0 0];
+segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasreg = bias_reg; %bias regularization parameter
+segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasfwhm = bias_fwhm; %bias fhwm parameter
+segmentation.matlabbatch{1}.spm.spatial.preproc.channel.write = [1 1]; %save field & corrected
 segmentation.matlabbatch{1}.spm.spatial.preproc.channel.vols = {fullfile(structural_fn)};
 % Tissue
 ngaus  = [1 1 2 3 4 2];
@@ -57,5 +57,7 @@ output.csf_fn = [d filesep 'c3' f e];
 output.bone_fn = [d filesep 'c4' f e];
 output.soft_fn = [d filesep 'c5' f e];
 output.air_fn = [d filesep 'c6' f e];
+output.correct_fn = [d filesep 'm' f e];
+output.field_fn = [d filesep 'BiasField_' f e];
 disp('SPM Probability maps done!');
 end

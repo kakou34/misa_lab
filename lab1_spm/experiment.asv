@@ -1,0 +1,57 @@
+clear all; 
+close all; 
+clc;
+
+%% Playing with the first sample 
+
+addpath('D:\Master\Girona\Segmentation\labs\lab1\spm12\spm12')
+base_data_path = 'D:\Master\Girona\Segmentation\labs\lab1\';
+
+structural_fn = fullfile(base_data_path, num2str(1), '/T1.nii,1');
+
+vol = niftiread(fullfile(base_data_path, num2str(1), '/T1.nii'));
+labels = niftiread(fullfile(base_data_path, num2str(1), '/LabelsForTesting.nii'));
+bias_reg = 0.01;
+bias_fwhm = 60;
+
+result = spm_seg(structural_fn, bias_reg, bias_fwhm);
+
+% Read tissue probability maps
+gm = niftiread(result.gm_fn(1:end-2));
+wm = niftiread(result.wm_fn(1:end-2));
+csf = niftiread(result.csf_fn(1:end-2));
+bone = niftiread(result.bone_fn(1:end-2));
+soft = niftiread(result.soft_fn(1:end-2));
+air = niftiread(result.air_fn(1:end-2));
+corrected = niftiread(result.correct_fn(1:end-2));
+field = niftiread(result.field_fn(1:end-2));
+
+% Classify the tissues according to maximum a posteriori probabilies
+maps = zeros(240, 240, 48, 6); 
+maps(:, :, :, 1) = csf; 
+maps(:, :, :, 2) = gm;
+maps(:, :, :, 3) = wm;
+maps(:, :, :, 4) = bone;
+maps(:, :, :, 5) = soft;
+maps(:, :, :, 6) = air;
+[~, res_seg] = max(maps, [], 4);
+
+% Ignore bone, soft tissue and air
+res_seg(res_seg>3) = 0;
+
+% Plotting figures for slice 24
+figure;
+t = tiledlayout(1,3); 
+nexttile
+imagesc(vol(:, :, 24));
+colormap gray
+axis square
+nexttile
+imagesc(corrected(:, :, 24));
+colormap gray
+nexttile
+imagesc(field(:, :, 24));
+colormap gray
+
+
+
