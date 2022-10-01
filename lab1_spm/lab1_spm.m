@@ -13,6 +13,17 @@ for i=1:5
     res_seg = segment_brain_tissues(fullfile(base_data_path, num2str(i), '/T1.nii,1'));
     labels = double(niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')));
     dice_results(i, :) = dice(res_seg , labels);
+
+    % plotting an example segmentation of one slice
+    figure;
+    t = tiledlayout(1,3); 
+    nexttile
+    imagesc(res_seg(:, :, 24))
+    nexttile
+    imagesc(labels(:, :, 24))
+    nexttile
+    imagesc(labels(:, :, 24) - res_seg(:, :, 24))
+
 end
 save('dice.mat','dice_results');
 
@@ -24,5 +35,8 @@ wm = dice_results(:, 3);
 boxplot([csf, gm, wm],'Labels',{'CSF', 'GM','WM'})
 title('Dice Scores per tissue type')
 
-% Maybe create a plot of some examples?
+
+
+
+
 
