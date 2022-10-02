@@ -1,1 +1,9 @@
-Sample 1, T1 => reg: 0.01 fwhm: 40 dice CSF: 0.79344 dice GM: 0.75415 dice WM: 0.827Sample 1, T1 => reg: 0.01 fwhm: 60 dice CSF: 0.79259 dice GM: 0.75373 dice WM: 0.8273Sample 1, T1 => reg: 0.01 fwhm: 100 dice CSF: 0.79272 dice GM: 0.75319 dice WM: 0.8276Sample 1, T1 => reg: 0.01 fwhm: 130 dice CSF: 0.79265 dice GM: 0.75262 dice WM: 0.82725
+
+Sample 1, T2_FLAIR => reg: 0 fwhm: 60 dice CSF: 0.70459 dice GM: 0.60494 dice WM: 0.67818
+Sample 1, T2_FLAIR => reg: 0.0001 fwhm: 60 dice CSF: 0.70302 dice GM: 0.60825 dice WM: 0.68033
+Sample 1, T2_FLAIR => reg: 0.01 fwhm: 60 dice CSF: 0.70348 dice GM: 0.61779 dice WM: 0.68934
+Sample 1, T2_FLAIR => reg: 1 fwhm: 60 dice CSF: 0.70318 dice GM: 0.61998 dice WM: 0.69129
+Sample 1, T2 FLAIR => reg: 0.01 fwhm: 40 dice CSF: 0.70584 dice GM: 0.61451 dice WM: 0.68625
+Sample 1, T2 FLAIR => reg: 0.01 fwhm: 60 dice CSF: 0.70348 dice GM: 0.61779 dice WM: 0.68934
+Sample 1, T2 FLAIR => reg: 0.01 fwhm: 100 dice CSF: 0.70266 dice GM: 0.62303 dice WM: 0.69282
+Sample 1, T2 FLAIR => reg: 0.01 fwhm: 130 dice CSF: 0.70261 dice GM: 0.62277 dice WM: 0.69271

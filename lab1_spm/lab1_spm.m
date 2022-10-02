@@ -3,8 +3,8 @@ clear all;
 close all; 
 clc;
 % Modify paths to your device:
-addpath('/home/jseia/Desktop/MATLAB/spm12')
-base_data_path = '/home/jseia/Desktop/MAIA/Clases/spain/misa/misa_lab/lab1_spm/data/P2_data/';
+addpath('D:\Master\Girona\Segmentation\labs\lab1\spm12\spm12')
+base_data_path = 'D:\Master\Girona\Segmentation\labs\lab1\';
 
 % Run segmentations and metrics
 dice_results = zeros(5, 3);
