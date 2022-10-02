@@ -1,12 +1,12 @@
 function output = spm_seg(structural_fn, bias_reg, bias_fwhm)
-% Function to segment T1 MRI data from a single subject using Matlab/SPM12.
+% Function to segment brain MRI data from a single subject using Matlab/SPM12.
 
 % Steps include coregistering structural image to first functional image,
 % segmenting the coregistered structural image into tissue types.
 % If spm12 batch parameters are not explicitly set, defaults are assumed. 
 %
 % INPUT:
-% structural_fn      - filename of T1-weighted structural scan
+% structural_fn      - filename of structural scan (T1 or FLAIR)
 % 
 % OUTPUT: 
 % output            - structure with filenames and data
@@ -16,7 +16,7 @@ output = struct;
 
 % Segmentation of coregistered structural image into GM, WM, CSF, etc
 % (with implicit warping to MNI space, saving forward and inverse transformations)
-disp('Segmentation of T2 volume starting...');
+disp('Segmentation of volume starting...');
 spm('defaults','fmri');
 spm_jobman('initcfg');
 segmentation = struct;

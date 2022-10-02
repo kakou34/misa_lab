@@ -2,7 +2,7 @@ clear all;
 close all; 
 clc;
 
-%% Playing with the first sample's bias field => T2
+%% Playing with the first sample's bias field 
 
 fid = fopen('log.txt','wt');
 

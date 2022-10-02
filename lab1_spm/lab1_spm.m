@@ -8,7 +8,7 @@ base_data_path = 'D:\Master\Girona\Segmentation\labs\lab1\';
 
 % Run segmentations and metrics
 dice_results = zeros(5, 3);
-for i=1:5
+for i=1:2
     % Running everything for one case:
     res_seg = segment_brain_tissues(fullfile(base_data_path, num2str(i), '/T1.nii,1'));
     labels = double(niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')));
