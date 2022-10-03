@@ -1,4 +1,4 @@
-function output = spm_seg(structural_fn)
+function output = spm_seg(structural_fn, settings)
 % Function to segment T1 MRI data from a single subject using Matlab/SPM12.
 
 % Steps include coregistering structural image to first functional image,
@@ -7,6 +7,7 @@ function output = spm_seg(structural_fn)
 %
 % INPUT:
 % structural_fn      - filename of T1-weighted structural scan
+% settings           - configuration settings for the segmentation pipeline
 % 
 % OUTPUT: 
 % output            - structure with filenames and data
@@ -23,9 +24,9 @@ segmentation = struct;
 % Channel
 
 %% Segmentation
-segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasreg = 0.001;
-segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasfwhm = 60;
-segmentation.matlabbatch{1}.spm.spatial.preproc.channel.write = [0 0];
+segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasreg = settings.biasreg;
+segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasfwhm = settings.biasfwhm;
+segmentation.matlabbatch{1}.spm.spatial.preproc.channel.write = settings.write;
 segmentation.matlabbatch{1}.spm.spatial.preproc.channel.vols = {fullfile(structural_fn)};
 % Tissue
 ngaus  = [1 1 2 3 4 2];
