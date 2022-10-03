@@ -8,25 +8,27 @@ addpath('D:\Master\Girona\Segmentation\labs\lab1\spm12\spm12') %import SPM
  
 base_data_path = 'D:\Master\Girona\Segmentation\labs\lab1\'; % where the data is 
 
+settings = struct();
+settings.write = [0 0];
+
 dice_score = zeros(2, 5); 
 
 % iterate over each sample
 for i=1:5
     disp(strcat("#### Sample ", num2str(i), " ####"))
+    labels = niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')); % reading the ground truth
 
     structural_fn = fullfile(base_data_path, num2str(i), '/T1.nii,1'); % scan path
     vol = niftiread(fullfile(base_data_path, num2str(i), '/T1.nii')); % reading the original scan
-    labels = niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')); % reading the ground truth
-
-    brain_mask_gt = int16(labels>0); % get the binary mask of the brain (0 for BG, 1 for Tissue)
+    brain_mask_gt = double(labels>0); % get the binary mask of the brain (0 for BG, 1 for Tissue)
 
     % I- T1 Scan
     
     % bias field correction parameters
-    b_reg = 0.0001;
-    b_fwhm = 40;
+    settings.biasreg = 0.0001;
+    settings.biasfwhm = 40;
     
-    result = spm_seg(structural_fn, b_reg, b_fwhm);  
+    result = spm_seg(structural_fn, settings);  
     % Read tissue probability maps
     gm = niftiread(result.gm_fn(1:end-2));
     wm = niftiread(result.wm_fn(1:end-2));
@@ -46,11 +48,11 @@ for i=1:5
     [~, res_seg] = max(maps, [], 4);
         
     % Extract brain mask
-    brain_mask = int16(res_seg<4); % Keep GM+WM+CSF
-    skull_mask = int16(res_seg==4); % bone mask 
+    brain_mask = double(res_seg<4); % Keep GM+WM+CSF
+    skull_mask = double(res_seg==4); % bone mask 
     
     % remove sull
-    skull_stripped = vol .* brain_mask;
+    skull_stripped = double(vol) .* brain_mask;
 
     % calculate dice
     dice_score(1, i) = dice(brain_mask, brain_mask_gt);
@@ -61,7 +63,7 @@ for i=1:5
     t = tiledlayout(1,4);
     nexttile
     imshow(uint8(vol(:, :, slice_i)));
-    title("Original T1 Slice");
+    title("T1 Slice");
     
     nexttile
     imagesc(skull_mask(:, :, slice_i));
@@ -83,12 +85,15 @@ for i=1:5
     exportgraphics(t,fig_fn)
     
     % I- T2 FLAIR Scan
+
+    structural_fn = fullfile(base_data_path, num2str(i), '/T2_FLAIR.nii,1'); % scan path
+    vol = niftiread(fullfile(base_data_path, num2str(i), '/T2_FLAIR.nii')); % reading the original scan
     
     % bias field correction parameters
-    b_reg = 1;
-    b_fwhm = 120;
+    settings.biasreg = 1;
+    settings.biasfwhm = 120;
     
-    result = spm_seg(structural_fn, b_reg, b_fwhm);  
+    result = spm_seg(structural_fn, settings);  
     % Read tissue probability maps
     gm = niftiread(result.gm_fn(1:end-2));
     wm = niftiread(result.wm_fn(1:end-2));
@@ -108,11 +113,11 @@ for i=1:5
     [~, res_seg] = max(maps, [], 4);
         
     % Extract brain mask
-    brain_mask = int16(res_seg<4); % Keep GM+WM+CSF
-    skull_mask = int16(res_seg==4); % bone mask
+    brain_mask = double(res_seg<4); % Keep GM+WM+CSF
+    skull_mask = double(res_seg==4); % bone mask
     
     % remove sull
-    skull_stripped = vol .* brain_mask;
+    skull_stripped = double(vol) .* brain_mask;
 
     % calculate dice
     dice_score(2, i) = dice(brain_mask, brain_mask_gt);
@@ -124,7 +129,7 @@ for i=1:5
     
     nexttile
     imshow(uint8(vol(:, :, slice_i)));
-    title("Original Slice");
+    title("T2 FLAIR Slice");
     
     nexttile
     imagesc(skull_mask(:, :, slice_i));
@@ -146,4 +151,6 @@ for i=1:5
     exportgraphics(t,fig_fn)
 
 end
+
+save('dice_skull_strp.mat','dice_score');
 
