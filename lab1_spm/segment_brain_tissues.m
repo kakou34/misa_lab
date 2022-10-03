@@ -1,12 +1,13 @@
-function res_seg = segment_brain_tissues(structural_fn)
+function res_seg = segment_brain_tissues(structural_fn, settings)
 % Function to segment T1 MRI data from a single subject using Matlab/SPM12.
 % structural_fn      - filename of T1-weighted structural scan
+% settings           - configuration settings for the segmentation pipeline
 % 
 % OUTPUT: 
 % output            - structure with filenames and data
 
 % Obtain segmentation posterior probability maps
-result = spm_seg(structural_fn);
+result = spm_seg(structural_fn, settings);
 
 % Read tissue probability maps
 gm = niftiread(result.gm_fn(1:end-2));
