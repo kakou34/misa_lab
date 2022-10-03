@@ -1,4 +1,4 @@
-function output = spm_seg(structural_fn, settings)
+function output = spm_seg(structural_fn, flair_fn, settings)
 % Function to segment T1 MRI data from a single subject using Matlab/SPM12.
 
 % Steps include coregistering structural image to first functional image,
@@ -28,6 +28,17 @@ segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasreg = settings.biasr
 segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasfwhm = settings.biasfwhm;
 segmentation.matlabbatch{1}.spm.spatial.preproc.channel.write = settings.write;
 segmentation.matlabbatch{1}.spm.spatial.preproc.channel.vols = {fullfile(structural_fn)};
+if ~strcmp(flair_fn , 'none')
+    disp('multichannel mode')
+    segmentation.matlabbatch{1}.spm.spatial.preproc.channel(1).biasreg = settings.biasreg;
+    segmentation.matlabbatch{1}.spm.spatial.preproc.channel(1).biasfwhm = settings.biasfwhm;
+    segmentation.matlabbatch{1}.spm.spatial.preproc.channel(1).write = settings.write;
+    segmentation.matlabbatch{1}.spm.spatial.preproc.channel(1).vols = {fullfile(structural_fn)};
+    segmentation.matlabbatch{1}.spm.spatial.preproc.channel(2).biasreg = settings.biasreg;
+    segmentation.matlabbatch{1}.spm.spatial.preproc.channel(2).biasfwhm = settings.biasfwhm;
+    segmentation.matlabbatch{1}.spm.spatial.preproc.channel(2).write = settings.write;
+    segmentation.matlabbatch{1}.spm.spatial.preproc.channel(2).vols = {fullfile(flair_fn)};
+end
 % Tissue
 ngaus  = [1 1 2 3 4 2];
 native = [1 1 1 1 1 1];
