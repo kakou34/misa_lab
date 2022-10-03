@@ -30,11 +30,5 @@ maps(:, :, :, 6) = air;
 % Ignore bone, soft tissue and air
 res_seg(res_seg>3) = 0;
 
-% Save results with correct spacing
-template_fn = [structural_fn];
-template_spm = spm_vol(template_fn);
-new_nii = spm_create_vol(template_spm);
-new_nii.fname = 'resulting_segmetation.nii';
-spm_write_vol(new_nii, res_seg);
 end
 
