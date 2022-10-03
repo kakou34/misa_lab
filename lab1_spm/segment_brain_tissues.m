@@ -1,12 +1,15 @@
-function res_seg = segment_brain_tissues(structural_fn)
-% Function to segment T1 MRI data from a single subject using Matlab/SPM12.
-% structural_fn      - filename of T1-weighted structural scan
+function [res_seg, corrected] = segment_brain_tissues(structural_fn, bias_reg, bias_fwhm)
+% Function to segment T1/T2 FLAIR MRI data from a single subject using Matlab/SPM12.
+% structural_fn      - filename of T1 or T2 FLAIR structural scan
+% bias_reg           - regularization parameter for bias field correction
+% bias_fwhm          - fwhm parameter for bias field correction
 % 
 % OUTPUT: 
-% output            - structure with filenames and data
+% res_seg            - segmentation result for CSF, GM, WM
+% corrected          - brain volume after bias field correction
 
 % Obtain segmentation posterior probability maps
-result = spm_seg(structural_fn);
+result = spm_seg(structural_fn, bias_reg, bias_fwhm);
 
 % Read tissue probability maps
 gm = niftiread(result.gm_fn(1:end-2));
@@ -15,6 +18,7 @@ csf = niftiread(result.csf_fn(1:end-2));
 bone = niftiread(result.bone_fn(1:end-2));
 soft = niftiread(result.soft_fn(1:end-2));
 air = niftiread(result.air_fn(1:end-2));
+corrected = niftiread(result.correct_fn(1:end-2));
 
 % Classify the tissues according to maximum a posteriori probabilies
 maps = zeros(240, 240, 48, 6); 

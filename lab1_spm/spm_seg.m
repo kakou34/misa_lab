@@ -7,6 +7,8 @@ function output = spm_seg(structural_fn, bias_reg, bias_fwhm)
 %
 % INPUT:
 % structural_fn      - filename of structural scan (T1 or FLAIR)
+% bias_reg           - regularization parameter for bias field correction
+% bias_fwhm          - fwhm parameter for bias field correction
 % 
 % OUTPUT: 
 % output            - structure with filenames and data
