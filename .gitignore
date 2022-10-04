@@ -1,1 +1,6 @@
+expectation_maximization/
 lab1_spm/data/
+lab1_spm/results_*
+lab1_spm/table*
+lab1_spm/dice_*
+lab1_spm/figs/results/*.nii

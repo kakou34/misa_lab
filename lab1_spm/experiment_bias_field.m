@@ -1,135 +1,159 @@
-clear all; 
-close all; 
-clc;
+%% MISA LAB 1, Joaquin Oscar Seia - Kaouther Mouheb 
+% This notebook contains the experiments on the parameters of bias field
+% correction
 
-%% Finetuning the parameters for bias field correction
+%% Bias field correction
+clear; close all; clc;
+% addpath('D:\Master\Girona\Segmentation\labs\lab1\spm12\spm12') %import SPM
+% base_data_path = 'D:\Master\Girona\Segmentation\labs\lab1\'; % where the data is 
+addpath('/home/jseia/Desktop/MATLAB/spm12') %import SPM
+base_data_path = '/home/jseia/Desktop/MAIA/Clases/spain/misa/misa_lab/lab1_spm/data/P2_data'; % where the data is 
 
-fid = fopen('log.txt','wt'); %log file
-
-addpath('D:\Master\Girona\Segmentation\labs\lab1\spm12\spm12')
-base_data_path = 'D:\Master\Girona\Segmentation\labs\lab1\';
-
-samp = 2; % Sample
-seq = 'T1'; % Modality to use
-
-structural_fn = fullfile(base_data_path, num2str(samp), strcat('/', seq, '.nii,1'));
-vol = niftiread(fullfile(base_data_path, num2str(samp), strcat('/', seq, '.nii')));
-labels = double(niftiread(fullfile(base_data_path, num2str(1), '/LabelsForTesting.nii')));
-
-
-% 1 - Modify regularization parameter
-bias_reg = [0, 0.0001, 0.01, 0.1, 1]; 
-bias_fwhm = 60;
-
-dice_s = zeros(length(bias_reg), 3);
-
-% iterate over each value of reg 
-for i = 1:length(bias_reg)
-    result = spm_seg(structural_fn, bias_reg(i), bias_fwhm);
-    [res_seg, corrected, field] = generate_mask(result);
-
-    % Dice 
-    dice_res = dice(res_seg, labels);
-    dice_s(i, :) = dice_res;
-
-    %log
-    msg = strcat("Sample ", num2str(samp), ", ", seq, " => reg: ", num2str(bias_reg(i)), " fwhm: ", num2str(bias_fwhm), " dice CSF: ", num2str(dice_res(1)), " dice GM: ", num2str(dice_res(2)), " dice WM: ", num2str(dice_res(3)), "\n");
-    fprintf(fid, msg);
-
-    % Qualitative results 
-    ttl = strcat("REG: ", num2str(bias_reg(i)), ", FWHM: ", num2str(bias_fwhm));
-    slice_i = 24;
-    figure;
-    t = tiledlayout(1,3); 
-    title(t,ttl);
-    nexttile
-    imshow(uint8(vol(:, :, slice_i)));
-    nexttile
-    imshow(uint8(corrected(:, :, slice_i)));
-    nexttile
-    imagesc(field(:, :, slice_i));
-    colormap gray
-    axis square off
-    
-    fig_fn = strcat("figs/bias_exp/s", num2str(samp), "_", seq, "_", num2str(bias_reg(i)), "_", num2str(bias_fwhm),".png");
-    exportgraphics(t,fig_fn)
+%% Parameters exploration on T1 images
+% Regularization
+dice_results_reg_t1 = zeros(4, 5, 3);
+regs = [0 0.0001 0.01 1];
+settings = struct();
+settings.biasreg = 0;
+settings.biasfwhm = 60;
+settings.write = [0 0];
+for j=1:length(regs)
+    for i=1:5
+        settings.biasreg = regs(j);
+        structural_fns = struct();
+        structural_fns.ch1 = fullfile(base_data_path, num2str(i), '/T1.nii,1'); % scan path
+        out_fn = fullfile(['figs/bias_exp/seg_res_t1.nii']);
+        [res_seg, ~, ~, ~, ~] = segment_brain_tissues(structural_fns, settings, out_fn);
+        labels = double(niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')));
+        dice_results_reg_t1(j, i, :) = dice(res_seg , labels);
+    end
 end
+save('dice_reg_T1.mat','dice_results_reg_t1');
+mean_std_dice_reg_t1_tissue_wise, mean_std_dice_reg_t1_subject_wise = ...
+    bias_params_tables(dice_results_reg_t1);
+save('dice/mean_std_dice_reg_t1_tissue_wise.mat','mean_std_dice_reg_t1_tissue_wise');
+save('dice/mean_std_dice_reg_t1_subject_wise.mat','mean_std_dice_reg_t1_subject_wise');
 
-% visualize dice
-x = bias_reg;
-y1 = dice_s(:, 1); % CSF Dice for each reg value
-y2 = dice_s(:, 2); % GM Dice 
-y3 = dice_s(:, 3); % WM Dice
-y4 = mean(transpose(dice_s)); % Average dice over the 3 tissues
-
-figure;
-plot(x,y1,'g',x,y2,'b',x,y3,'r', x,y4, 'm--');
-xlabel('Bias Regularization');
-ylabel('Dice Score');
-legend('CSF','GM', 'WM', 'Avg');
-title(strcat('Dice VS Bias Regularisation - ', seq));
-exportgraphics(gcf,strcat('figs\bias_exp\s', num2str(samp),'_dice_reg_', seq, '.png'))
-
-% save dice
-dice_fn = strcat('dice\dice_s', num2str(samp), '_', seq, '_reg.mat');
-save(dice_fn,'dice_s');
-
-
-% ########################
-% 2 - Modify Bias Field FWHM
-
-bias_reg = 0.01; 
-bias_fwhm = [40, 60, 80, 100, 120, 140];
-
-dice_s = zeros(length(bias_fwhm), 3);
-
-% iterate over each value of reg 
-for i = 1:length(bias_fwhm)
-    result = spm_seg(structural_fn, bias_reg, bias_fwhm(i)); 
-    [res_seg, corrected, field] = generate_mask(result);
-
-    % Dice 
-    dice_res = dice(res_seg, labels);
-    dice_s(i, :) = dice_res;
-
-    %log
-    msg = strcat("Sample ", num2str(samp), ", ", seq, " => reg: ", num2str(bias_reg), " fwhm: ", num2str(bias_fwhm(i)), " dice CSF: ", num2str(dice_res(1)), " dice GM: ", num2str(dice_res(2)), " dice WM: ", num2str(dice_res(3)), "\n");
-    fprintf(fid, msg);
-
-    % Qualitative results 
-    ttl = strcat("REG: ", num2str(bias_reg), ", FWHM: ", num2str(bias_fwhm(i)));
-    slice_i = 24;
-    figure;
-    t = tiledlayout(1,3); 
-    title(t,ttl);
-    nexttile
-    imshow(uint8(vol(:, :, slice_i)));
-    nexttile
-    imshow(uint8(corrected(:, :, slice_i)));
-    nexttile
-    imagesc(field(:, :, slice_i));
-    colormap gray
-    axis square off
-    fig_fn = strcat("figs/bias_exp/s", num2str(samp), "_", seq, "_", num2str(bias_reg), "_", num2str(bias_fwhm(i)),".png");
-    exportgraphics(t,fig_fn)
+% FWHM
+dice_results_fwhm_t1 = zeros(5, 5, 3);
+fwhms = [40 60 80 100 120];
+settings = struct();
+settings.biasreg = 0.01;
+settings.biasfwhm = 60;
+settings.write = [0 0];
+for j=1:length(fwhms)
+    for i=1:5
+        settings.biasfwhm = fwhms(j);
+        structural_fns = struct();
+        structural_fns.ch1 = fullfile(base_data_path, num2str(i), '/T1.nii,1'); % scan path
+        out_fn = fullfile(['figs/bias_exp/seg_res_t1.nii']);
+        [res_seg, ~, ~, ~, ~] = segment_brain_tissues(structural_fns, settings, out_fn);
+        labels = double(niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')));
+        dice_results_fwhm_t1(j, i, :) = dice(res_seg , labels);
+    end
 end
+save('dice/dice_fwhm_T1.mat','dice_results_fwhm_t1');
+mean_std_dice_fwhm_t1_tissue_wise, mean_std_dice_fwhm_t1_subject_wise = ...
+    bias_params_tables(dice_results_fwhm_t1);
+save('dice/mean_std_dice_fwhm_t1_tissue_wise.mat','mean_std_dice_fwhm_t1_tissue_wise');
+save('dice/mean_std_dice_fwhm_t1_subject_wise.mat','mean_std_dice_fwhm_t1_subject_wise');
 
-% visualize dice
-x = bias_fwhm;
-y1 = dice_s(:, 1); % CSF Dice for each reg value
-y2 = dice_s(:, 2); % GM Dice 
-y3 = dice_s(:, 3); % WM Dice
-y4 = mean(transpose(dice_s)); % Average dice over the 3 tissues
+%% Parameters exploration on T2 images
+% Regularization
+dice_results_reg_t2 = zeros(4, 5, 3);
+regs = [0 0.0001 0.01 1];
+settings = struct();
+settings.biasreg = 0;
+settings.biasfwhm = 60;
+settings.write = [0 0];
+for j=1:length(regs)
+    for i=1:5
+        settings.biasreg = regs(j);
+        structural_fns = struct();
+        structural_fns.ch1 = fullfile(base_data_path, num2str(i), '/T2_FLAIR.nii,1'); % scan path
+        out_fn = fullfile(['figs/bias_exp/seg_res_t2.nii']);
+        [res_seg, ~, ~, ~, ~] = segment_brain_tissues(structural_fns, settings, out_fn);
+        labels = double(niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')));
+        dice_results_reg_t2(j, i, :) = dice(res_seg , labels);
+    end
+end
+save('dice_reg_T2.mat','dice_results_reg_t2');
+mean_std_dice_reg_t2_tissue_wise, mean_std_dice_reg_t2_subject_wise = ...
+    bias_params_tables(dice_results_reg_t2);
+save('dice/mean_std_dice_reg_t2_tissue_wise.mat','mean_std_dice_reg_t2_tissue_wise');
+save('dice/mean_std_dice_reg_t2_subject_wise.mat','mean_std_dice_reg_t2_subject_wise');
 
-figure;
-plot(x,y1,'g',x,y2,'b',x,y3,'r', x,y4, 'm--');
-xlabel('Bias FWHM');
-ylabel('Dice Score');
-legend('CSF','GM', 'WM', 'Avg');
-title(strcat('Dice VS Bias FWHM - ', seq));
-exportgraphics(gcf,strcat('figs\bias_exp\s', num2str(samp),'_dice_fwhm_', seq, '.png'))
+% FWHM
+dice_results_fwhm_t2 = zeros(5, 5, 3);
+fwhms = [40 60 80 100 120];
+settings = struct();
+settings.biasreg = 0.01;
+settings.biasfwhm = 60;
+settings.write = [0 0];
+for j=1:length(fwhms)
+    for i=1:5
+        settings.biasfwhm = fwhms(j);
+        structural_fns = struct();
+        structural_fns.ch1 = fullfile(base_data_path, num2str(i), '/T2_FLAIR.nii,1'); % scan path
+        out_fn = fullfile(['figs/bias_exp/seg_res_t2.nii']);
+        [res_seg, ~, ~, ~, ~] = segment_brain_tissues(structural_fns, settings, out_fn);
+        labels = double(niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')));
+        dice_results_fwhm_t2(j, i, :) = dice(res_seg , labels);
+    end
+end
+save('dice/dice_fwhm_T2.mat','dice_results_fwhm_t2');
+mean_std_dice_fwhm_t2_tissue_wise, mean_std_dice_fwhm_t2_subject_wise= ...
+    bias_params_tables(dice_results_fwhm_t2);
+save('dice/mean_std_dice_fwhm_t2_tissue_wise.mat','mean_std_dice_fwhm_t2_tissue_wise');
+save('dice/mean_std_dice_fwhm_t2_subject_wise.mat','mean_std_dice_fwhm_t2_subject_wise');
 
+%% Parameters exploration on T1+T2 images
+% Regularization
+dice_results_reg_t1_t2 = zeros(4, 5, 3);
+regs = [0 0.0001 0.01 1];
+settings = struct();
+settings.biasreg = 0;
+settings.biasfwhm = 60;
+settings.write = [0 0];
+for j=1:length(regs)
+    for i=1:5
+        settings.biasreg = regs(j);
+        structural_fns = struct();
+        structural_fns.ch1 = fullfile(base_data_path, num2str(i), '/T1.nii,1'); % scan path
+        structural_fns.ch2 = fullfile(base_data_path, num2str(i), '/T2_FLAIR.nii,1'); % scan path
+        out_fn = fullfile(['figs/bias_exp/seg_res_t1_t2.nii']);
+        [res_seg, ~, ~, ~, ~] = segment_brain_tissues(structural_fns, settings, out_fn);
+        labels = double(niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')));
+        dice_results_reg_t1_t2(j, i, :) = dice(res_seg , labels);
+    end
+end
+save('dice_reg_T1_T2.mat','dice_results_reg_t1_t2');
+mean_std_dice_reg_t1_t2_tissue_wise, mean_std_dice_reg_t1_t2_subject_wise = ...
+    bias_params_tables(dice_results_reg_t1_t2);
+save('dice/mean_std_dice_reg_t1_t2_tissue_wise.mat','mean_std_dice_reg_t1_t2_tissue_wise');
+save('dice/mean_std_dice_reg_t1_t2_subject_wise.mat','mean_std_dice_reg_t1_t2_subject_wise');
 
-% save dice
-dice_fn = strcat('dice\dice_s', num2str(samp), '_', seq, '_fwhm.mat');
-save(dice_fn,'dice_s');
+% FWHM
+dice_results_fwhm_t1_t2 = zeros(5, 5, 3);
+fwhms = [40 60 80 100 120];
+settings = struct();
+settings.biasreg = 0.01;
+settings.biasfwhm = 60;
+settings.write = [0 0];
+for j=1:length(fwhms)
+    for i=1:5
+        settings.biasfwhm = fwhms(j);
+        structural_fns = struct();
+        structural_fns.ch1 = fullfile(base_data_path, num2str(i), '/T1.nii,1'); % scan path
+        structural_fns.ch2 = fullfile(base_data_path, num2str(i), '/T2_FLAIR.nii,1'); % scan path
+        out_fn = fullfile(['figs/bias_exp/seg_res_t1_t2.nii']);
+        [res_seg, ~, ~, ~, ~] = segment_brain_tissues(structural_fns, settings, out_fn);
+        labels = double(niftiread(fullfile(base_data_path, num2str(i), '/LabelsForTesting.nii')));
+        dice_results_fwhm_t1_t2(j, i, :) = dice(res_seg , labels);
+    end
+end
+save('dice/dice_fwhm_T1.mat','dice_results_fwhm_t1_t2');
+mean_std_dice_fwhm_t1_t2_tissue_wise, mean_std_dice_fwhm_t1_t2_subject_wise = ...
+    bias_params_tables(dice_results_fwhm_t1_t2);
+save('dice/mean_std_dice_fwhm_t1_t2_tissue_wise.mat','mean_std_dice_fwhm_t1_t2_tissue_wise');
+save('dice/mean_std_dice_fwhm_t1_t2_subject_wise.mat','mean_std_dice_fwhm_t1_t2_subject_wise');
