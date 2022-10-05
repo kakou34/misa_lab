@@ -4,4 +4,15 @@ lab1_spm/data/
 lab1_spm/results_*
 lab1_spm/table*
 lab1_spm/dice_*
-lab1_spm/figs/results/*.nii
+lab1_spm/figs/results/*s1_t1.nii
+lab1_spm/figs/results/*s1_t2.nii
+lab1_spm/figs/results/*s2_t1.nii
+lab1_spm/figs/results/*s2_t2.nii
+lab1_spm/figs/results/*s3_t1.nii
+lab1_spm/figs/results/*s3_t2.nii
+lab1_spm/figs/results/*s4_t1.nii
+lab1_spm/figs/results/*s4_t2.nii
+lab1_spm/figs/results/*s5_t1.nii
+lab1_spm/figs/results/*s5_t2.nii
+
+

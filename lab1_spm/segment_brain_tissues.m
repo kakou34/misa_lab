@@ -15,7 +15,7 @@ function [res_seg, brain_mask, skull_mask, skull_stripped, corrected] = ...
     % corrected          - brain volume after bias field correction
     
     % segement tissues
-    result = spm_seg(struct_fns, settings);  
+    result = spm_seg(struct_fns, settings);
     
     % read tissue probability maps
     gm = niftiread(result.gm_fn(1:end-2));

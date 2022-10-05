@@ -12,7 +12,6 @@ function output = spm_seg(struct_fns, settings)
 % 
 % OUTPUT: 
 % output            - structure with filenames of the generated volumes
-
 % Declare output structure
 output = struct;
 
@@ -24,7 +23,7 @@ spm_jobman('initcfg');
 segmentation = struct;
 % Channel
 
-%% Segmentation
+% Segmentation
 if length(fieldnames(struct_fns)) == 1
     segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasreg = settings.biasreg; %bias regularization parameter
     segmentation.matlabbatch{1}.spm.spatial.preproc.channel.biasfwhm = settings.biasfwhm; %bias fhwm parameter
@@ -40,8 +39,18 @@ else
     segmentation.matlabbatch{1}.spm.spatial.preproc.channel(2).vols = {fullfile(struct_fns.ch2)};
 end
 
+if isfield(settings, 'ngauss')
+    ngaus = [1 settings.ngauss 2 3 4 2];
+else
+    ngaus  = [1 1 2 3 4 2];
+end
+if isfield(settings, 'cleanup')
+    cleanup = settings.cleanup;
+else
+    cleanup = 1;
+end
+
 % Tissue
-ngaus  = [1 1 2 3 4 2];
 native = [1 1 1 1 1 1];
 for c = 1:6 % tissue class c
     segmentation.matlabbatch{1}.spm.spatial.preproc.tissue(c).tpm = {
@@ -53,7 +62,7 @@ end
 
 % Warp
 segmentation.matlabbatch{1}.spm.spatial.preproc.warp.mrf = 1;
-segmentation.matlabbatch{1}.spm.spatial.preproc.warp.cleanup = 1;
+segmentation.matlabbatch{1}.spm.spatial.preproc.warp.cleanup = cleanup;
 segmentation.matlabbatch{1}.spm.spatial.preproc.warp.reg = [0 0.001 0.5 0.05 0.2];
 segmentation.matlabbatch{1}.spm.spatial.preproc.warp.affreg = 'mni';
 segmentation.matlabbatch{1}.spm.spatial.preproc.warp.fwhm = 0;
