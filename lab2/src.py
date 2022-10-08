@@ -1,15 +1,14 @@
-from distutils.ccompiler import new_compiler
 import logging
-from os import replace
-from re import A
 import numpy as np
-from typing import Union, Tuple
+from typing import Union
 from sklearn.cluster import KMeans, MeanShift
 from scipy.stats import multivariate_normal
 from tqdm import tqdm
 import seaborn as sns
+import matplotlib.pyplot as plt
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
+
 
 def our_multivariate_normal_pdf(x, means, sigmas):
     n_feats = means.shape[1] if np.ndim(means) > 1 else 1
@@ -123,7 +122,7 @@ class ExpectationMaximization():
         # Define initial covariance matrix
         _, self.sigmas, self.counts = self.estimate_mean_and_cov(
             self.x, self.labels, means=self.means, start_single_cov=self.start_single_cov)
-        
+
         # Log initial info
         if self.verbose:
             logging.info('Starting Expectation Maximization Algorithm')
@@ -140,7 +139,7 @@ class ExpectationMaximization():
         self.expectation()
         self.predictions = np.argmax(self.posteriors, 1)
         return self.predictions
-    
+
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
         if not self.fitted:
             raise Exception('Algorithm hasn\'t been fitted')
@@ -175,11 +174,12 @@ class ExpectationMaximization():
             self.maximization()
             if self.verbose:
                 logging.info(f'Iteration: {it} - Log likelihood change: {difference}')
-    
+
     def expectation(self):
         self.likelihood = gaussian_likelihood(
             self.x, self.means, self.sigmas, self.use_our_gauss_likelihood)
-        num = np.asarray([self.likelihood[:, j] * self.priors[j] for j in range(self.n_components)]).T
+        num = np.asarray([
+            self.likelihood[:, j] * self.priors[j] for j in range(self.n_components)]).T
         denom = np.sum(num, 1)
         self.posteriors = np.asarray([num[:, j] / denom for j in range(self.n_components)]).T
 
@@ -195,7 +195,7 @@ class ExpectationMaximization():
             self.posteriors = self.posteriors * self.labels
             weithed_avg = np.dot(self.posteriors.T, self.x)
             self.means = weithed_avg / self.counts[:, np.newaxis]
-            mea = np.dot(self.labels.T, self.x) / self.counts[:, np.newaxis]
+            # mea = np.dot(self.labels.T, self.x) / self.counts[:, np.newaxis]
             self.sigmas = np.zeros((self.n_components, self.n_feat, self.n_feat))
             for i in range(self.n_components):
                 diff = self.x - self.means[i, :]
@@ -229,18 +229,18 @@ class ExpectationMaximization():
             predictions = np.argmax(self.posteriors, 1)
             if self.n_feat == 1:
                 fig, ax = plt.subplots()
-                ax = sns.histplot(
+                sns.histplot(
                     x=self.x[:,0], hue=predictions, kde=False, bins=255,
-                    stat='probability')
+                    stat='probability', ax=ax)
                 n = 10000
                 fit_x = np.zeros((3*n, 2))
                 for i in range(self.n_components):
                     fit_x[i*n:(i+1)*n, 0] = np.random.normal(
                         loc=self.means[i], scale=self.sigmas[i][0], size=n)
                     fit_x[i*n:(i+1)*n, 1] = i
-                ax = sns.histplot(
+                sns.histplot(
                     x=fit_x[:, 0], element='poly', kde=False, hue=fit_x[:, 1],
-                    stat='probability')
+                    stat='probability', ax=ax)
                 plt.show()
             else:
                 plt.figure()
@@ -250,5 +250,5 @@ class ExpectationMaximization():
                     plt.figure()
                     indx = np.random.choice(np.arange(self.x.shape[0]), 1000, False)
                     sample = self.x[indx, :]
-                    sns.kdeplot(x=sample[:,0], y=sample[:,1])
+                    sns.kdeplot(x=sample[:, 0], y=sample[:, 1])
                     plt.show()
