@@ -2,7 +2,7 @@
 ## MAIA Master 2022
 
 
-This repository contains all the code produced ass part of the Medical Image Segmetation (CAD) course part of the MAIA master. 
+This repository contains all the code produced as part of the Medical Image Segmetation & Applications (MISA) course part of the MAIA master.
 
 Laboratories:
     - Lab 1: SPM usage on brain tissue segmentations. (MATLAB based buuuu!)
