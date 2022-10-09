@@ -150,7 +150,8 @@ class ExpectationMaximization():
         """
         self.fitted = True
         self.x = x
-        self.n_samples, self.n_feat = x.shape
+        self.n_feat = x.shape[1] if np.ndim(x) > 1 else 1
+        self.n_samples = len(x)
         self.labels = np.zeros((self.n_samples, self.n_components))
 
         # Define kind of priors to be used
@@ -188,7 +189,7 @@ class ExpectationMaximization():
 
         # Define initial covariance matrix
         _, self.sigmas, self.counts = self.estimate_mean_and_cov(
-            self.x, self.labels, means=self.means, start_single_cov=self.start_single_cov)
+            self.x, self.labels, start_single_cov=self.start_single_cov)
 
         # Log initial info
         if self.verbose:
