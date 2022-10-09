@@ -1,16 +1,30 @@
 import logging
-import numpy as np
-from typing import Union
-from sklearn.cluster import KMeans, MeanShift
-from scipy.stats import multivariate_normal
-from tqdm import tqdm
-import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from tqdm import tqdm
+from scipy.stats import multivariate_normal
+from sklearn.cluster import KMeans, MeanShift
+from typing import Union, Tuple
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 
-def our_multivariate_normal_pdf(x, means, sigmas):
+def our_multivariate_normal_pdf(
+    x: np.ndarray, means: np.ndarray, sigmas: np.ndarray
+) -> np.ndarray:
+    """
+    Computes the probability of each of the datapoints for each of the classes, assuming a
+    Gaussian distribution for each of them, with mean and convariance matrix/covariance
+    given by 'means' and 'sigmas'.
+    Args:
+        x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
+        means (np.ndarray): Means 2D array, rows=components, columns=features
+        sigmas (np.ndarray): Covariance/variance 3D array, dim 0: components,
+            dim 1 and 2: n_features x n_features
+    Returns:
+        (np.ndarray): 2D Gaussian probabilities array, rows=sample, columns=components
+    """
     n_feats = means.shape[1] if np.ndim(means) > 1 else 1
     constant = 1/(((2*np.pi) ** n_feats/2) * (np.linalg.det(sigmas) ** 1/2))
     dif = x - means
@@ -21,9 +35,25 @@ def our_multivariate_normal_pdf(x, means, sigmas):
     return constant * np.exp(-(1/2)*mahalanobis_dist)
 
 
-def gaussian_likelihood(x, means, sigmas, use_our_gauss_likelihood):
-    n_components, n_feats = means.shape
-    n_samples = x.shape[0]
+def gaussian_likelihood(
+    x: np.ndarray, means: np.ndarray, sigmas: np.ndarray, use_our_gauss_likelihood: bool = False
+) -> np.ndarray:
+    """
+    Computes the likelihood of each of the datapoints for each of the classes, assuming a
+    Gaussian distribution for each of them, with mean and convariance matrix/covariance
+    given by 'means' and 'sigmas'.
+    Args:
+        x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
+        means (np.ndarray): Means 2D array, rows=components, columns=features
+        sigmas (np.ndarray): Covariance/variance 3D array, dim 0: components,
+            dim 1 and 2: n_features x n_features
+        use_our_gauss_likelihood (bool, optional): Wheather to use our
+            multivariate gaussian probability funtion or numpy's. Defaults to False,
+            which means use numpy's
+    Returns:
+        (np.ndarray): 2D Gaussian probabilities array, rows=sample, columns=components
+    """
+    n_components, _ = means.shape
     if use_our_gauss_likelihood:
         likelihood = [our_multivariate_normal_pdf(
             x, means[i, :], sigmas[i, :, :]) for i in range(n_components)]
@@ -37,7 +67,7 @@ class ExpectationMaximization():
     def __init__(
         self,
         n_components: int = 3,
-        mean_init: Union[str, np.ndarray] = 'random',  # array, 'k-means'
+        mean_init: Union[str, np.ndarray] = 'random',
         priors: Union[str, np.ndarray] = 'non_informative',
         hard_em: bool = True,
         max_iter: int = 100,
@@ -47,8 +77,40 @@ class ExpectationMaximization():
         start_single_cov: bool = False,
         plot_rate: int = None,
         use_our_gauss_likelihood: bool = False
-    ) -> None:
-
+    ):
+        """
+        Instatiator of the Expectation Maximization model.
+        Args:
+            n_components (int, optional): Number of components to be used.
+                Defaults to 3.
+            mean_init (Union[str, np.ndarray], optional): How to initialize the means.
+                You can either pass an array or use one of ['random', 'kmeans',
+                'mean_shifts']. Defaults to 'random'.
+            priors (Union[str, np.ndarray], optional): How to initialize the priors.
+                You can either pass an array or use 'non_informative'. Defaults to
+                'non_informative'
+            hard_em (bool, optional): Whether to perform "hard" of "fuzzy" computation
+                of mean and covariance matrices over the maximization step. Fuzzy uses
+                the weights given by the posteriors of the previous iteration and the
+                class asignment, hard just uses the hard assignment of points in each
+                class. Defaults to True.
+            max_iter (int, optional): Maximum number of iterations for the algorith to
+                run. Defaults to 100.
+            change_tol (float, optional): Minimum change in the summed log-likelihood
+                between two iterations, if less stop. Defaults to 1e-5.
+            seed (float, optional): Seed to guarantee reproducibility. Defaults to 420.
+            verbose (bool, optional): Whether to print messages on evolution or not.
+                Defaults to False.
+            start_single_cov (bool, optional): Whether to start with a single covariance
+                matrix from all the data or the ones estimates using the initial means
+                after an M step. Defaults to False.
+            plot_rate (int, optional): Number of iterations after which a scatter plot
+                (or a histogram in 1D data) is plotted to see the progress in classification.
+                Defaults to None, which means no plotting.
+            use_our_gauss_likelihood (bool, optional): Wheather to use our
+                multivariate gaussian probability funtion or numpy's. Defaults to False,
+                which means use numpy's
+        """
         self.n_components = n_components
         self.mean_init = mean_init
         self.priors = priors
@@ -82,11 +144,16 @@ class ExpectationMaximization():
             )
 
     def fit(self, x: np.ndarray):
+        """ Runs the EM procedure using the data provided and the configured parameters.
+        Args:
+            x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
+        """
         self.fitted = True
         self.x = x
         self.n_samples, self.n_feat = x.shape
         self.labels = np.zeros((self.n_samples, self.n_components))
 
+        # Define kind of priors to be used
         self.priors_type = 'Provided array'
         if isinstance(self.priors, str) and (self.priors == 'non_informative'):
             self.priors = np.ones((self.n_components, 1)) / self.n_components
@@ -134,6 +201,14 @@ class ExpectationMaximization():
         self.cluster_centroids = self.means
 
     def predict(self, x: np.ndarray) -> np.ndarray:
+        """ Predicts the datopoints in x according to the gaussians found runing the
+        EM fitting process.
+        Args:
+            x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
+        Returns:
+            (np.ndarray): One-hot predictions 2D array, rows=samples, columns=components
+        """
+        self.x = x
         if not self.fitted:
             raise Exception('Algorithm hasn\'t been fitted')
         self.expectation()
@@ -141,17 +216,35 @@ class ExpectationMaximization():
         return self.predictions
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
+        """
+        Predicts the datopoints in x according to the gaussians found furing the
+        EM fitting process. Returns the posterior probability for each point for
+        each class.
+        Args:
+            x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
+        Returns:
+            (np.ndarray): Posterior probabilities 2D array, rows=samples,
+                columns=components
+        """
         if not self.fitted:
             raise Exception('Algorithm hasn\'t been fitted')
         self.expectation()
         return self.posteriors
 
     def fit_predict(self, x: np.ndarray) -> np.ndarray:
+        """ Runs the EM procedure using the data provided and the configured parameters and
+        predicts the datopoints in x according to the reuslting gaussians.
+        Args:
+            x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
+        Returns:
+            np.ndarray: One-hot predictions 2D array, rows=samples, columns=components
+        """
         self.fit(x)
         self.predictions = self.predict(self.x)
         return self.predictions
 
     def expectation_maximization(self):
+        """ Expectation Maximization process """
         prev_log_lkh = 0
         for it in tqdm(range(self.max_iter), disable=self.verbose):
             # E-step
@@ -176,6 +269,10 @@ class ExpectationMaximization():
                 logging.info(f'Iteration: {it} - Log likelihood change: {difference}')
 
     def expectation(self):
+        """ Expectation Step:
+        Obtains the likelihoods with the current means and covariances, and computes the
+        posterior probabilities (or weights)
+        """
         self.likelihood = gaussian_likelihood(
             self.x, self.means, self.sigmas, self.use_our_gauss_likelihood)
         num = np.asarray([
@@ -184,6 +281,11 @@ class ExpectationMaximization():
         self.posteriors = np.asarray([num[:, j] / denom for j in range(self.n_components)]).T
 
     def maximization(self):
+        """ Maximization Step:
+        With the belonging of each point to certain class (binary in the 'hard' case, or with
+            the posterior wieght in the 'fuzzy' mode) it computes the new mean and covariance
+            for each class
+        """
         self.counts = np.sum(self.labels, 0)
         self.priors = self.counts / len(self.x)
         if self.hard_em:
@@ -203,7 +305,24 @@ class ExpectationMaximization():
                 self.sigmas[i] = np.dot(weighted_diff.T, diff) / self.counts[i]
 
     @staticmethod
-    def estimate_mean_and_cov(x, labels, means=None, cov_reg=1e-6, start_single_cov=False):
+    def estimate_mean_and_cov(
+        x: np.ndarray, labels: np.ndarray, cov_reg: float = 1e-6,
+        start_single_cov: bool = False
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Given the datapoints and which one belongs to which class (labels), computes
+        their mean and covariance.
+        Args:
+            x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
+            labels (np.ndarray): 2D array with one hot labeling of the points
+                rows=samples, columns=components
+            cov_reg (float, optional): Regularizer over main diagonal of covariance
+                matrix to avoid singularities. Defaults to 1e-6.
+            start_single_cov (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray, np.ndarray]: _description_
+        """
         n_components = labels.shape[1]
         n_feat = x.shape[1]
         min_val = 10 * np.finfo(labels.dtype).eps
@@ -224,13 +343,18 @@ class ExpectationMaximization():
             sigmas = (sigmas[:, np.newaxis])[:, np.newaxis]
         return means, sigmas, counts
 
-    def plots(self, it):
+    def plots(self, it: int):
+        """ Plots the scatter plots (or histograms in 1D cases) of data assignments
+        to each gaussian across the iterations.
+        Args:
+            it (int): Iteration number.
+        """
         if (it % 10) == 0:
             predictions = np.argmax(self.posteriors, 1)
             if self.n_feat == 1:
                 fig, ax = plt.subplots()
                 sns.histplot(
-                    x=self.x[:,0], hue=predictions, kde=False, bins=255,
+                    x=self.x[:, 0], hue=predictions, kde=False, bins=255,
                     stat='probability', ax=ax)
                 n = 10000
                 fit_x = np.zeros((3*n, 2))
