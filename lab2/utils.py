@@ -70,7 +70,6 @@ def match_pred_w_gt(
     dists = np.zeros((n_components, n_components))
     for i in range(n_components):
         for j in range(n_components):
-            print(np.linalg.norm(means_pred[i, :] - means_gt[j, :]))
             dists[i, j] = np.linalg.norm(means_pred[i, :] - means_gt[j, :])
 
     # Match classes according to closer mean intensity value
