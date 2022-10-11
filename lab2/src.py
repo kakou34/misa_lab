@@ -134,19 +134,19 @@ class ExpectationMaximization():
             )
 
         # Check kind of means to be used
-        mean_options = ['radom', 'kmeans', 'mean_shifts']
+        mean_options = ['random', 'kmeans', 'mean_shifts']
         condition_one = isinstance(mean_init, str) and (mean_init not in mean_options)
         condition_two = isinstance(priors, np.ndarray) and (priors.size != n_components)
         if condition_one or condition_two:
             raise Exception(
-                "Priors must be either 'random', 'kmeans', ' mean_shifts', or "
+                "Initial means must be either 'random', 'kmeans', ' mean_shifts', or "
                 "an array of 'n_components' rows, and n_features number of columns"
             )
 
     def fit(self, x: np.ndarray):
         """ Runs the EM procedure using the data provided and the configured parameters.
         Args:
-            x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
+            x (np.ndar ray): Datapoints 2D array, rows=samples, columns=features
         """
         self.fitted = True
         self.x = x
@@ -163,12 +163,14 @@ class ExpectationMaximization():
         # Define kind of means to be used
         self.mean_type = 'Passed array'
         if isinstance(self.mean_init, str):
-            if self.mean_init == 'radom':
+            if self.mean_init == 'random':
                 rng = np.random.default_rng(seed=self.seed)
                 self.means = rng.integers(0, 255, (self.n_components, self.n_feat))
                 self.mean_type = 'Random Init'
+                # col_idx = np.random.randint(0, self.n_components, self.n_samples)
+                # self.labels[np.arange(self.n_samples), col_idx] = 1
                 idx = rng.choice(self.n_samples, size=self.n_components, replace=False)
-                self.posteriors[idx, np.arange(self.n_components)] = 1
+                self.labels[idx, np.arange(self.n_components)] = 1
             elif self.mean_init == 'kmeans':
                 kmeans = KMeans(
                     n_clusters=self.n_components, random_state=self.seed).fit(self.x)
@@ -188,8 +190,12 @@ class ExpectationMaximization():
             self.labels[idx, np.arange(self.n_components)] = 1
 
         # Define initial covariance matrix
-        _, self.sigmas, self.counts = self.estimate_mean_and_cov(
-            self.x, self.labels, start_single_cov=self.start_single_cov)
+        if self.mean_init == 'random':
+            _, self.sigmas, self.counts = self.estimate_mean_and_cov(
+                self.x, self.labels, start_single_cov=True)
+        else:
+            _, self.sigmas, self.counts = self.estimate_mean_and_cov(
+                self.x, self.labels, start_single_cov=self.start_single_cov)
 
         # Log initial info
         if self.verbose:
@@ -274,6 +280,8 @@ class ExpectationMaximization():
         Obtains the likelihoods with the current means and covariances, and computes the
         posterior probabilities (or weights)
         """
+        # print(self.means)
+        # print(self.sigmas)
         self.likelihood = gaussian_likelihood(
             self.x, self.means, self.sigmas, self.use_our_gauss_likelihood)
         num = np.asarray([
@@ -288,6 +296,7 @@ class ExpectationMaximization():
             for each class
         """
         self.counts = np.sum(self.labels, 0)
+        # print(self.counts)
         self.priors = self.counts / len(self.x)
         if self.hard_em:
             self.labels = np.zeros((self.x.shape[0], self.n_components))
@@ -330,8 +339,12 @@ class ExpectationMaximization():
         counts = labels.sum(axis=0) + min_val
         means = np.dot(labels.T, x) / counts[:, np.newaxis]
         if start_single_cov:
-            sigmas = np.cov(x.T)
-            sigmas = np.repeat(sigmas[np.newaxis, :], n_components, 0)
+            sigmas = np.zeros((n_components, n_feat, n_feat))
+            sigma = np.cov((x - np.mean(x, axis=0)).T)
+            for i in range(n_components):
+                sigmas[i] = sigma
+                # Avoid singular matrices
+                sigmas[i].flat[:: n_feat + 1] += cov_reg
         else:
             sigmas = np.zeros((n_components, n_feat, n_feat))
             for i in range(n_components):
