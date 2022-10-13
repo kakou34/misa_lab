@@ -27,12 +27,12 @@ def our_multivariate_normal_pdf(
     """
     n_feats = means.shape[1] if np.ndim(means) > 1 else 1
     constant = 1/(((2*np.pi) ** n_feats/2) * (np.linalg.det(sigmas) ** 1/2))
+    n_samples = len(x)
     dif = x - means
-    if (np.linalg.det(sigmas) != 0):
-        mahalanobis_dist = np.sum(np.square(np.dot(dif, np.linalg.inv(sigmas))), axis=-1)
-    else:
-        mahalanobis_dist = np.sum(np.square(np.dot(dif, np.linalg.pinv(sigmas))), axis=-1)
-    return constant * np.exp(-(1/2)*mahalanobis_dist)
+    mahalanobis_dist = np.tensordot(
+        dif, np.linalg.inv(sigmas)[np.newaxis, :], axes=([1], [1])).reshape((n_samples, -1))
+    mahalanobis_dist = (mahalanobis_dist * dif).sum(axis=1)
+    return constant * np.exp(-(1/2) * mahalanobis_dist)
 
 
 def gaussian_likelihood(
@@ -123,6 +123,7 @@ class ExpectationMaximization():
         self.fitted = False
         self.hard_em = hard_em
         self.use_our_gauss_likelihood = use_our_gauss_likelihood
+        self.cluster_centers_ = None
 
         # Check kind of priors to be used
         condition_one = isinstance(priors, str) and (priors not in ['non_informative'])
@@ -165,16 +166,12 @@ class ExpectationMaximization():
         if isinstance(self.mean_init, str):
             if self.mean_init == 'random':
                 rng = np.random.default_rng(seed=self.seed)
-                self.means = rng.integers(0, 255, (self.n_components, self.n_feat))
                 self.mean_type = 'Random Init'
-                # col_idx = np.random.randint(0, self.n_components, self.n_samples)
-                # self.labels[np.arange(self.n_samples), col_idx] = 1
                 idx = rng.choice(self.n_samples, size=self.n_components, replace=False)
                 self.labels[idx, np.arange(self.n_components)] = 1
             elif self.mean_init == 'kmeans':
                 kmeans = KMeans(
                     n_clusters=self.n_components, random_state=self.seed).fit(self.x)
-                self.means = kmeans.cluster_centers_
                 self.mean_type = 'K-Means'
                 self.labels[np.arange(self.n_samples), kmeans.labels_] = 1
             else:
@@ -191,10 +188,10 @@ class ExpectationMaximization():
 
         # Define initial covariance matrix
         if self.mean_init == 'random':
-            _, self.sigmas, self.counts = self.estimate_mean_and_cov(
+            self.means, self.sigmas, self.counts = self.estimate_mean_and_cov(
                 self.x, self.labels, start_single_cov=True)
         else:
-            _, self.sigmas, self.counts = self.estimate_mean_and_cov(
+            self.means, self.sigmas, self.counts = self.estimate_mean_and_cov(
                 self.x, self.labels, start_single_cov=self.start_single_cov)
 
         # Log initial info
@@ -205,7 +202,7 @@ class ExpectationMaximization():
 
         # Expectation Maximization process
         self.expectation_maximization()
-        self.cluster_centroids = self.means
+        self.cluster_centers_ = self.means
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """ Predicts the datopoints in x according to the gaussians found runing the
@@ -295,13 +292,10 @@ class ExpectationMaximization():
             the posterior wieght in the 'fuzzy' mode) it computes the new mean and covariance
             for each class
         """
-        self.counts = np.sum(self.labels, 0)
-        # print(self.counts)
-        self.priors = self.counts / len(self.x)
+        self.labels = np.zeros((self.x.shape[0], self.n_components))
+        self.labels[np.arange(self.n_samples), np.argmax(self.posteriors, axis=1)] = 1
         if self.hard_em:
-            self.labels = np.zeros((self.x.shape[0], self.n_components))
-            self.labels[np.arange(self.n_samples), np.argmax(self.posteriors, axis=1)] = 1
-            self.means, self.sigmas, _ = self.estimate_mean_and_cov(self.x, self.labels)
+            self.means, self.sigmas, self.counts = self.estimate_mean_and_cov(self.x, self.labels)
             self.priors = self.counts / len(self.x)
         else:
             self.posteriors = self.posteriors * self.labels
