@@ -292,13 +292,17 @@ class ExpectationMaximization():
             the posterior wieght in the 'fuzzy' mode) it computes the new mean and covariance
             for each class
         """
+        # print(np.sum(self.posteriors, axis=1))
         self.labels = np.zeros((self.x.shape[0], self.n_components))
         self.labels[np.arange(self.n_samples), np.argmax(self.posteriors, axis=1)] = 1
+        self.counts = np.sum(self.labels, 0)
         if self.hard_em:
             self.means, self.sigmas, self.counts = self.estimate_mean_and_cov(self.x, self.labels)
             self.priors = self.counts / len(self.x)
         else:
-            self.posteriors = self.posteriors * self.labels
+            # print(self.counts[np.newaxis, :])
+            self.posteriors = self.posteriors * self.labels #/ self.counts[np.newaxis, :]
+            self.counts = np.sum(self.posteriors, 0)
             weithed_avg = np.dot(self.posteriors.T, self.x)
             self.means = weithed_avg / self.counts[:, np.newaxis]
             # mea = np.dot(self.labels.T, self.x) / self.counts[:, np.newaxis]
