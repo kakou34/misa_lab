@@ -7,7 +7,7 @@ clear; close all; clc;
 % addpath('D:\Master\Girona\Segmentation\labs\lab1\spm12\spm12') %import SPM
 % base_data_path = 'D:\Master\Girona\Segmentation\labs\lab1\'; % where the data is 
 addpath('/home/jseia/Desktop/MATLAB/spm12') %import SPM
-base_data_path = '/home/jseia/Desktop/MAIA/Clases/spain/misa/misa_lab/lab1_spm/data/P2_data'; % where the data is 
+base_data_path = '/home/jseia/Desktop/MAIA/Clases/spain/misa/misa_lab/data/P2_data'; % where the data is 
 
 % Store the quantitative results
 results_t1 = zeros(5, 3);
