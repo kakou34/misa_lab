@@ -9,7 +9,7 @@ addpath('/home/jseia/Desktop/MATLAB/spm12') %import SPM
 base_data_path = '/home/jseia/Desktop/MAIA/Clases/spain/misa/misa_lab/lab1_spm/data/P2_data'; % where the data is 
 
 %% Parameters exploration on T2 images
-% Regularization
+%% 1. Number of Gaussians
 dice_results_ngauss_t2 = zeros(4, 5, 3);
 settings = struct();
 settings.biasreg = 1;
@@ -33,9 +33,9 @@ mean_std_dice_ngauss_t2_tissue_wise, mean_std_dice_ngauss_t2_subject_wise = ...
 save('dice/mean_std_dice_ngauss_t2_tissue_wise.mat','mean_std_dice_ngauss_t2_tissue_wise');
 save('dice/mean_std_dice_ngauss_t2_subject_wise.mat','mean_std_dice_ngauss_t2_subject_wise');
 
-%% CLEANUP
-% Parameters exploration on T2 images
-% Regularization
+%% 2. CLEANUP
+
+% ------------------ T2 FLAIR -------------------
 dice_results_cleanup_t2 = zeros(4, 5, 3);
 settings = struct();
 settings.biasreg = 1;
@@ -62,8 +62,7 @@ mean_std_dice_cleanup_t2_tissue_wise, mean_std_dice_cleanup_t2_subject_wise = ..
 save('dice/mean_std_dice_cleanup_t2_tissue_wise.mat','mean_std_dice_cleanup_t2_tissue_wise');
 save('dice/mean_std_dice_cleanup_t2_subject_wise.mat','mean_std_dice_cleanup_t2_subject_wise');
 
-% Parameters exploration on T1 images
-% Regularization
+% --------------------- T1 ------------------------
 dice_results_cleanup_t1 = zeros(4, 5, 3);
 settings = struct();
 settings.biasreg = 1;
