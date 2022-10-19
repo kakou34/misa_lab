@@ -10,33 +10,8 @@ from typing import Union, Tuple
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 
-def our_multivariate_normal_pdf(
-    x: np.ndarray, means: np.ndarray, sigmas: np.ndarray
-) -> np.ndarray:
-    """
-    Computes the probability of each of the datapoints for each of the classes, assuming a
-    Gaussian distribution for each of them, with mean and convariance matrix/covariance
-    given by 'means' and 'sigmas'.
-    Args:
-        x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
-        means (np.ndarray): Means 2D array, rows=components, columns=features
-        sigmas (np.ndarray): Covariance/variance 3D array, dim 0: components,
-            dim 1 and 2: n_features x n_features
-    Returns:
-        (np.ndarray): 2D Gaussian probabilities array, rows=sample, columns=components
-    """
-    n_feats = means.shape[1] if np.ndim(means) > 1 else 1
-    constant = 1/(((2*np.pi) ** n_feats/2) * (np.linalg.det(sigmas) ** 1/2))
-    n_samples = len(x)
-    dif = x - means
-    mahalanobis_dist = np.tensordot(
-        dif, np.linalg.inv(sigmas)[np.newaxis, :], axes=([1], [1])).reshape((n_samples, -1))
-    mahalanobis_dist = (mahalanobis_dist * dif).sum(axis=1)
-    return constant * np.exp(-(1/2) * mahalanobis_dist)
-
-
 def gaussian_likelihood(
-    x: np.ndarray, means: np.ndarray, sigmas: np.ndarray, use_our_gauss_likelihood: bool = False
+    x: np.ndarray, means: np.ndarray, sigmas: np.ndarray,
 ) -> np.ndarray:
     """
     Computes the likelihood of each of the datapoints for each of the classes, assuming a
@@ -47,19 +22,12 @@ def gaussian_likelihood(
         means (np.ndarray): Means 2D array, rows=components, columns=features
         sigmas (np.ndarray): Covariance/variance 3D array, dim 0: components,
             dim 1 and 2: n_features x n_features
-        use_our_gauss_likelihood (bool, optional): Wheather to use our
-            multivariate gaussian probability funtion or numpy's. Defaults to False,
-            which means use numpy's
     Returns:
         (np.ndarray): 2D Gaussian probabilities array, rows=sample, columns=components
     """
     n_components, _ = means.shape
-    if use_our_gauss_likelihood:
-        likelihood = [our_multivariate_normal_pdf(
-            x, means[i, :], sigmas[i, :, :]) for i in range(n_components)]
-    else:
-        likelihood = [multivariate_normal.pdf(
-            x, means[i, :], sigmas[i, :, :], allow_singular=True) for i in range(n_components)]
+    likelihood = [multivariate_normal.pdf(
+        x, means[i, :], sigmas[i, :, :], allow_singular=True) for i in range(n_components)]
     return np.asarray(likelihood).T
 
 
@@ -69,14 +37,12 @@ class ExpectationMaximization():
         n_components: int = 3,
         mean_init: Union[str, np.ndarray] = 'random',
         priors: Union[str, np.ndarray] = 'non_informative',
-        hard_em: bool = True,
         max_iter: int = 100,
-        change_tol: float = 1e-5,
+        change_tol: float = 1e-6,
         seed: float = 420,
         verbose: bool = False,
         start_single_cov: bool = False,
-        plot_rate: int = None,
-        use_our_gauss_likelihood: bool = False
+        plot_rate: int = None
     ):
         """
         Instatiator of the Expectation Maximization model.
@@ -89,11 +55,6 @@ class ExpectationMaximization():
             priors (Union[str, np.ndarray], optional): How to initialize the priors.
                 You can either pass an array or use 'non_informative'. Defaults to
                 'non_informative'
-            hard_em (bool, optional): Whether to perform "hard" of "fuzzy" computation
-                of mean and covariance matrices over the maximization step. Fuzzy uses
-                the weights given by the posteriors of the previous iteration and the
-                class asignment, hard just uses the hard assignment of points in each
-                class. Defaults to True.
             max_iter (int, optional): Maximum number of iterations for the algorith to
                 run. Defaults to 100.
             change_tol (float, optional): Minimum change in the summed log-likelihood
@@ -107,9 +68,6 @@ class ExpectationMaximization():
             plot_rate (int, optional): Number of iterations after which a scatter plot
                 (or a histogram in 1D data) is plotted to see the progress in classification.
                 Defaults to None, which means no plotting.
-            use_our_gauss_likelihood (bool, optional): Wheather to use our
-                multivariate gaussian probability funtion or numpy's. Defaults to False,
-                which means use numpy's
         """
         self.n_components = n_components
         self.mean_init = mean_init
@@ -121,9 +79,8 @@ class ExpectationMaximization():
         self.start_single_cov = start_single_cov
         self.plot_rate = plot_rate
         self.fitted = False
-        self.hard_em = hard_em
-        self.use_our_gauss_likelihood = use_our_gauss_likelihood
         self.cluster_centers_ = None
+        self.n_iter_ = 0
 
         # Check kind of priors to be used
         condition_one = isinstance(priors, str) and (priors not in ['non_informative'])
@@ -251,6 +208,8 @@ class ExpectationMaximization():
         """ Expectation Maximization process """
         prev_log_lkh = 0
         for it in tqdm(range(self.max_iter), disable=self.verbose):
+            self.n_iter_ = it + 1
+
             # E-step
             self.expectation()
 
@@ -277,10 +236,7 @@ class ExpectationMaximization():
         Obtains the likelihoods with the current means and covariances, and computes the
         posterior probabilities (or weights)
         """
-        # print(self.means)
-        # print(self.sigmas)
-        self.likelihood = gaussian_likelihood(
-            self.x, self.means, self.sigmas, self.use_our_gauss_likelihood)
+        self.likelihood = gaussian_likelihood(self.x, self.means, self.sigmas)
         num = np.asarray([
             self.likelihood[:, j] * self.priors[j] for j in range(self.n_components)]).T
         denom = np.sum(num, 1)
@@ -288,29 +244,28 @@ class ExpectationMaximization():
 
     def maximization(self):
         """ Maximization Step:
-        With the belonging of each point to certain class (binary in the 'hard' case, or with
-            the posterior wieght in the 'fuzzy' mode) it computes the new mean and covariance
+        With the belonging of each point to certain class -given by the posterior wieght-
+        computes the new mean and covariance
             for each class
         """
-        # print(np.sum(self.posteriors, axis=1))
+        # Redefine labels with maximum a posteriori
         self.labels = np.zeros((self.x.shape[0], self.n_components))
         self.labels[np.arange(self.n_samples), np.argmax(self.posteriors, axis=1)] = 1
-        self.counts = np.sum(self.labels, 0)
-        if self.hard_em:
-            self.means, self.sigmas, self.counts = self.estimate_mean_and_cov(self.x, self.labels)
-            self.priors = self.counts / len(self.x)
-        else:
-            # print(self.counts[np.newaxis, :])
-            self.posteriors = self.posteriors * self.labels #/ self.counts[np.newaxis, :]
-            self.counts = np.sum(self.posteriors, 0)
-            weithed_avg = np.dot(self.posteriors.T, self.x)
-            self.means = weithed_avg / self.counts[:, np.newaxis]
-            # mea = np.dot(self.labels.T, self.x) / self.counts[:, np.newaxis]
-            self.sigmas = np.zeros((self.n_components, self.n_feat, self.n_feat))
-            for i in range(self.n_components):
-                diff = self.x - self.means[i, :]
-                weighted_diff = self.posteriors[:, i][:, np.newaxis] * diff
-                self.sigmas[i] = np.dot(weighted_diff.T, diff) / self.counts[i]
+
+        # Get means
+        self.posteriors = self.posteriors * self.labels
+        self.counts = np.sum(self.posteriors, 0)
+        weithed_avg = np.dot(self.posteriors.T, self.x)
+
+        # Get means
+        self.means = weithed_avg / self.counts[:, np.newaxis]
+
+        # Get covariances
+        self.sigmas = np.zeros((self.n_components, self.n_feat, self.n_feat))
+        for i in range(self.n_components):
+            diff = self.x - self.means[i, :]
+            weighted_diff = self.posteriors[:, i][:, np.newaxis] * diff
+            self.sigmas[i] = np.dot(weighted_diff.T, diff) / self.counts[i]
 
     @staticmethod
     def estimate_mean_and_cov(
@@ -334,7 +289,7 @@ class ExpectationMaximization():
         n_components = labels.shape[1]
         n_feat = x.shape[1]
         min_val = 10 * np.finfo(labels.dtype).eps
-        counts = labels.sum(axis=0) + min_val
+        counts = np.sum(labels, axis=0) + min_val
         means = np.dot(labels.T, x) / counts[:, np.newaxis]
         if start_single_cov:
             sigmas = np.zeros((n_components, n_feat, n_feat))
@@ -361,28 +316,31 @@ class ExpectationMaximization():
         Args:
             it (int): Iteration number.
         """
-        if (it % 10) == 0:
+        if (it % self.plot_rate) == 0:
             predictions = np.argmax(self.posteriors, 1)
             if self.n_feat == 1:
                 fig, ax = plt.subplots()
                 sns.histplot(
                     x=self.x[:, 0], hue=predictions, kde=False, bins=255,
                     stat='probability', ax=ax)
-                n = 10000
-                fit_x = np.zeros((3*n, 2))
-                for i in range(self.n_components):
-                    fit_x[i*n:(i+1)*n, 0] = np.random.normal(
-                        loc=self.means[i], scale=self.sigmas[i][0], size=n)
-                    fit_x[i*n:(i+1)*n, 1] = i
-                sns.histplot(
-                    x=fit_x[:, 0], element='poly', kde=False, hue=fit_x[:, 1],
-                    stat='probability', ax=ax)
+                plt.xlabel('Intensities')
+                plt.title(f'Labels assignment at iteration {it}')
                 plt.show()
             else:
                 plt.figure()
-                sns.scatterplot(x=self.x[:, 0], y=self.x[:, 1], hue=predictions)
+                if it == 0:
+                    plt.scatter(x=self.x[:, 0], y=self.x[:, 1])
+                for i in range(self.n_components):
+                    plt.scatter(
+                        x=self.x[self.labels[:, i] == 1, 0],
+                        y=self.x[self.labels[:, i] == 1, 1]
+                    )
+                plt.ylabel('T2 intensities')
+                plt.xlabel('T1 intensities')
+                plt.title(f'Labels assignment at iteration {it}')
+                sns.despine()
                 plt.show()
-                if it == 10:
+                if it == 0:
                     plt.figure()
                     indx = np.random.choice(np.arange(self.x.shape[0]), 1000, False)
                     sample = self.x[indx, :]
