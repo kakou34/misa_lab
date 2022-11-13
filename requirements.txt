@@ -9,3 +9,4 @@ SimpleITK == 2.2.0
 scikit-image == 0.19.3
 seaborn == 0.12.0
 tqdm == 4.64.1
+itk-elastix == 0.14.2

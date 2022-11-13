@@ -27,7 +27,7 @@ pip install -r requirements.txt
 ### Download and prepare the database
 
 ```bash
-mkdir data && mv data &&
+mkdir data && cd data &&
 gdown https://drive.google.com/uc?id=1JcaAFfX297Ui2o1FLz8F_Fw_tjPWukT3 &&
 mkdir P2_data && mv P2_data.tar.gz P2_data/P2_data.tar.gz &&
 cd P2_data/ && tar zxvf 'P2_data.tar.gz' && rm -rf 'P2_data.tar.gz' &&

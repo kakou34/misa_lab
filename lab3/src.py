@@ -4,8 +4,8 @@ import numpy as np
 import seaborn as sns
 from tqdm import tqdm
 from scipy.stats import multivariate_normal
-from sklearn.cluster import KMeans, MeanShift
-from typing import Union, Tuple
+from sklearn.cluster import KMeans
+from typing import Union
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
@@ -37,12 +37,15 @@ class ExpectationMaximization():
         n_components: int = 3,
         mean_init: Union[str, np.ndarray] = 'random',
         priors: Union[str, np.ndarray] = 'non_informative',
-        max_iter: int = 100,
+        max_iter: int = 500,
         change_tol: float = 1e-6,
         seed: float = 420,
         verbose: bool = False,
-        start_single_cov: bool = False,
-        plot_rate: int = None
+        plot_rate: int = None,
+        tissue_models: np.ndarray = None,
+        atlas_use: str = None,
+        atlas_map: np.ndarray = None,
+        previous_result: np.ndarray = None
     ):
         """
         Instatiator of the Expectation Maximization model.
@@ -52,9 +55,6 @@ class ExpectationMaximization():
             mean_init (Union[str, np.ndarray], optional): How to initialize the means.
                 You can either pass an array or use one of ['random', 'kmeans',
                 'mean_shifts']. Defaults to 'random'.
-            priors (Union[str, np.ndarray], optional): How to initialize the priors.
-                You can either pass an array or use 'non_informative'. Defaults to
-                'non_informative'
             max_iter (int, optional): Maximum number of iterations for the algorith to
                 run. Defaults to 100.
             change_tol (float, optional): Minimum change in the summed log-likelihood
@@ -62,43 +62,51 @@ class ExpectationMaximization():
             seed (float, optional): Seed to guarantee reproducibility. Defaults to 420.
             verbose (bool, optional): Whether to print messages on evolution or not.
                 Defaults to False.
-            start_single_cov (bool, optional): Whether to start with a single covariance
-                matrix from all the data or the ones estimates using the initial means
-                after an M step. Defaults to False.
             plot_rate (int, optional): Number of iterations after which a scatter plot
                 (or a histogram in 1D data) is plotted to see the progress in classification.
                 Defaults to None, which means no plotting.
+            tissue_models (np.ndarray, optional): Tissue probability maps for the different
+                components. This will be used for generating the initialization of the EM
+                algorithm. Dimesions should be [n_components, n_hist_bins]
+                If not used, None should be passed. Defaults to None
+            atlas_use (str, optional): How to use the probability maps, either at the end
+                ('after') or in each iteration ('into'). Defaults to None
+            atlas_map (np.ndarray, optional): Atlas volumes, it should have dimesions 
+                [n_components, [volume dimensions]]. The atlas map for each component can be
+                either binary or a probability one. Defaults to None, which means not using
+                the atlas_maps
+            previous_result (np.ndarray, optional): Result from EM part for "after" use of atlases.
+                If provided just the last multiplication is done. Defaults to None.
         """
         self.n_components = n_components
         self.mean_init = mean_init
         self.priors = priors
         self.change_tol = change_tol
+        self.previous_result = previous_result
         self.max_iter = max_iter
         self.seed = seed
         self.verbose = verbose
-        self.start_single_cov = start_single_cov
         self.plot_rate = plot_rate
         self.fitted = False
         self.cluster_centers_ = None
         self.n_iter_ = 0
-
-        # Check kind of priors to be used
-        condition_one = isinstance(priors, str) and (priors not in ['non_informative'])
-        condition_two = isinstance(priors, np.ndarray) and (priors.size != n_components)
-        if condition_one or condition_two:
-            raise Exception(
-                "Priors must be either 'non_informative' or an array of "
-                "'n_components' elements"
-            )
+        self.tissue_models = tissue_models
+        self.atlas_use = atlas_use
+        self.atlas_map = atlas_map
+        if self.atlas_map is not None:
+            self.atlas_map = self.atlas_map.T
+            self.atlas_map[np.sum(self.atlas_map, axis=1) == 0, :] = np.ones((1, 3))/3
+            self.atlas_map = self.atlas_map / self.atlas_map.sum(axis=1)[:, None]
+        self.training = False
 
         # Check kind of means to be used
-        mean_options = ['random', 'kmeans', 'mean_shifts']
+        mean_options = ['random', 'kmeans', 'tissue_models', 'label_prop']
         condition_one = isinstance(mean_init, str) and (mean_init not in mean_options)
         condition_two = isinstance(priors, np.ndarray) and (priors.size != n_components)
         if condition_one or condition_two:
             raise Exception(
-                "Initial means must be either 'random', 'kmeans', ' mean_shifts', or "
-                "an array of 'n_components' rows, and n_features number of columns"
+                "Initial means must be either 'random', 'kmeans', 'tisssue_models', "
+                "'label_prop' or an array of 'n_components' rows, and n_features number of columns"
             )
 
     def fit(self, x: np.ndarray):
@@ -106,60 +114,62 @@ class ExpectationMaximization():
         Args:
             x (np.ndar ray): Datapoints 2D array, rows=samples, columns=features
         """
-        self.fitted = True
+        self.training = True
         self.x = x
         self.n_feat = x.shape[1] if np.ndim(x) > 1 else 1
         self.n_samples = len(x)
-        self.labels = np.zeros((self.n_samples, self.n_components))
-
-        # Define kind of priors to be used
-        self.priors_type = 'Provided array'
-        if isinstance(self.priors, str) and (self.priors == 'non_informative'):
-            self.priors = np.ones((self.n_components, 1)) / self.n_components
-            self.priors_type = 'Non Informative'
+        self.labels = np.ones((self.n_samples, self.n_components))
+        self.posteriors = np.zeros((self.n_samples, self.n_components))
 
         # Define kind of means to be used
         self.mean_type = 'Passed array'
         if isinstance(self.mean_init, str):
             if self.mean_init == 'random':
-                rng = np.random.default_rng(seed=self.seed)
                 self.mean_type = 'Random Init'
+                rng = np.random.default_rng(seed=self.seed)
                 idx = rng.choice(self.n_samples, size=self.n_components, replace=False)
-                self.labels[idx, np.arange(self.n_components)] = 1
+                self.posteriors[idx, np.arange(self.n_components)] = 1
+                self.priors = np.ones((self.n_components, 1)) / self.n_components
             elif self.mean_init == 'kmeans':
+                self.mean_type = 'K-Means'
                 kmeans = KMeans(
                     n_clusters=self.n_components, random_state=self.seed).fit(self.x)
-                self.mean_type = 'K-Means'
-                self.labels[np.arange(self.n_samples), kmeans.labels_] = 1
+                self.posteriors[np.arange(self.n_samples), kmeans.labels_] = 1
+            elif self.mean_init == 'tissue_models':
+                self.mean_type = 'Tissue Models'
+                tissue_prob_maps = np.zeros((self.n_samples, self.n_components))
+                for c in range(self.n_components):
+                    tissue_prob_maps[:, c] = self.tissue_models[c, :][self.x[:, 0]]
+                self.posteriors = tissue_prob_maps
+                self.posteriors[np.arange(self.n_samples), np.argmax(tissue_prob_maps, axis=1)] = 1
             else:
-                mean_shift = MeanShift().fit(self.x)
-                self.means = mean_shift.cluster_centers_
-                self.n_components = self.means.shape[0]
-                self.mean_type = 'Mean Shifts'
-                self.labels = \
-                    self.labels[np.arange(self.n_samples), mean_shift.labels_] = 1
+                self.mean_type = 'Label Propagation'
+                self.posteriors = self.atlas_map
         else:
             self.means = self.mean_init
             idx = rng.choice(self.n_samples, size=self.n_components, replace=False)
             self.labels[idx, np.arange(self.n_components)] = 1
 
-        # Define initial covariance matrix
-        if self.mean_init == 'random':
-            self.means, self.sigmas, self.counts = self.estimate_mean_and_cov(
-                self.x, self.labels, start_single_cov=True)
+        if self.previous_result is not None:
+            self.posteriors = self.previous_result
+            if self.mean_init == 'kmeans':
+                self.match_labels()
+            self.posteriors = self.posteriors * self.atlas_map
+            self.maximization(initial=True, initial_random=(self.mean_init == 'random'))
         else:
-            self.means, self.sigmas, self.counts = self.estimate_mean_and_cov(
-                self.x, self.labels, start_single_cov=self.start_single_cov)
+            # Do initial maximization step to get gaussian inital parameters
+            self.maximization(initial=True, initial_random=(self.mean_init == 'random'))
 
-        # Log initial info
-        if self.verbose:
-            logging.info('Starting Expectation Maximization Algorithm')
-            logging.info(f'Priors type: {self.priors_type} \n {self.priors}')
-            logging.info(f'Mean type: {self.mean_type} \n {self.means}')
+            # Log initial info
+            if self.verbose:
+                logging.info('Starting Expectation Maximization Algorithm')
+                logging.info(f'Priors type: {self.priors_type} \n {self.priors}')
+                logging.info(f'Mean type: {self.mean_type} \n {self.means}')
 
-        # Expectation Maximization process
-        self.expectation_maximization()
+            # Expectation Maximization process
+            self.expectation_maximization()
         self.cluster_centers_ = self.means
+        self.fitted = True
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """ Predicts the datopoints in x according to the gaussians found runing the
@@ -169,12 +179,13 @@ class ExpectationMaximization():
         Returns:
             (np.ndarray): One-hot predictions 2D array, rows=samples, columns=components
         """
+        self.training = False
         self.x = x
         if not self.fitted:
             raise Exception('Algorithm hasn\'t been fitted')
         self.expectation()
         self.predictions = np.argmax(self.posteriors, 1)
-        return self.predictions
+        return self.posteriors, self.predictions
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
         """
@@ -187,6 +198,8 @@ class ExpectationMaximization():
             (np.ndarray): Posterior probabilities 2D array, rows=samples,
                 columns=components
         """
+        self.x = x
+        self.training = False
         if not self.fitted:
             raise Exception('Algorithm hasn\'t been fitted')
         self.expectation()
@@ -201,17 +214,17 @@ class ExpectationMaximization():
             np.ndarray: One-hot predictions 2D array, rows=samples, columns=components
         """
         self.fit(x)
-        self.predictions = self.predict(self.x)
-        return self.predictions
+        self.posteriors, self.predictions = self.predict(self.x)
+        return self.posteriors, self.predictions
 
     def expectation_maximization(self):
         """ Expectation Maximization process """
         prev_log_lkh = 0
-        for it in tqdm(range(self.max_iter), disable=self.verbose):
+        for it in tqdm(range(self.max_iter), disable=self.verbose, desc=f'EM-{self.mean_init}-{self.atlas_use}'):
             self.n_iter_ = it + 1
 
             # E-step
-            self.expectation()
+            self.expectation(it)
 
             # Scatter plots to see the evolution
             if self.plot_rate is not None:
@@ -224,6 +237,8 @@ class ExpectationMaximization():
             difference = abs(prev_log_lkh - log_lkh)
             prev_log_lkh = log_lkh
             if difference < self.change_tol:
+                if self.atlas_use == 'after':
+                    self.posteriors = self.posteriors * self.atlas_map
                 break
 
             # M-Step
@@ -231,7 +246,7 @@ class ExpectationMaximization():
             if self.verbose:
                 logging.info(f'Iteration: {it} - Log likelihood change: {difference}')
 
-    def expectation(self):
+    def expectation(self, it: int = None):
         """ Expectation Step:
         Obtains the likelihoods with the current means and covariances, and computes the
         posterior probabilities (or weights)
@@ -242,18 +257,44 @@ class ExpectationMaximization():
         denom = np.sum(num, 1)
         self.posteriors = np.asarray([num[:, j] / denom for j in range(self.n_components)]).T
 
-    def maximization(self):
+        if (self.atlas_use == 'into' and self.training):
+            self.posteriors = self.posteriors * self.atlas_map
+
+        if (self.atlas_use == 'after' and not(self.training)):
+            if self.mean_init == 'kmeans':
+                self.match_labels()
+            self.posteriors = self.posteriors * self.atlas_map
+
+    def match_labels(self):
+        """
+        Matchs the em-kmeans assigned labels to the stardard order used in the atlases and labels
+        """
+        labels_em = np.argmax(self.posteriors, axis=1)
+        labels_atlas = np.argmax(self.atlas_map, axis=1)
+        order = {}
+        for label in [1, 2]:
+            labels, counts = np.unique(labels_em[labels_atlas == label], return_counts=True)
+            order[label] = labels[np.argmax(counts)]
+        # for csf class use the left em-kmeans label, since is not a trustable class
+        order[0] = [i for i in [0, 1, 2] if i not in list(order.values())][0]
+
+        # resort
+        self.posteriors_ = self.posteriors.copy()
+        for key, val in order.items():
+            self.posteriors_[key, :] = self.posteriors[val, :]
+
+    def maximization(self, initial: bool = False, initial_random: bool = False):
         """ Maximization Step:
         With the belonging of each point to certain class -given by the posterior wieght-
-        computes the new mean and covariance
-            for each class
+        computes the new mean and covariance for each class
+            initial_random (str, optional): In random initialization, start covariance 
+                matrices the same one for all components. Defaults to None
         """
         # Redefine labels with maximum a posteriori
         self.labels = np.zeros((self.x.shape[0], self.n_components))
         self.labels[np.arange(self.n_samples), np.argmax(self.posteriors, axis=1)] = 1
 
         # Get means
-        self.posteriors = self.posteriors * self.labels
         self.counts = np.sum(self.posteriors, 0)
         weithed_avg = np.dot(self.posteriors.T, self.x)
 
@@ -262,56 +303,19 @@ class ExpectationMaximization():
 
         # Get covariances
         self.sigmas = np.zeros((self.n_components, self.n_feat, self.n_feat))
-        for i in range(self.n_components):
-            diff = self.x - self.means[i, :]
-            weighted_diff = self.posteriors[:, i][:, np.newaxis] * diff
-            self.sigmas[i] = np.dot(weighted_diff.T, diff) / self.counts[i]
-
-        # Get priors 
-        self.priors = self.counts / len(self.x)
-
-    @staticmethod
-    def estimate_mean_and_cov(
-        x: np.ndarray, labels: np.ndarray, cov_reg: float = 1e-6,
-        start_single_cov: bool = False
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Given the datapoints and which one belongs to which class (labels), computes
-        their mean and covariance.
-        Args:
-            x (np.ndarray): Datapoints 2D array, rows=samples, columns=features
-            labels (np.ndarray): 2D array with one hot labeling of the points
-                rows=samples, columns=components
-            cov_reg (float, optional): Regularizer over main diagonal of covariance
-                matrix to avoid singularities. Defaults to 1e-6.
-            start_single_cov (bool, optional): _description_. Defaults to False.
-
-        Returns:
-            Tuple[np.ndarray, np.ndarray, np.ndarray]: _description_
-        """
-        n_components = labels.shape[1]
-        n_feat = x.shape[1]
-        min_val = 10 * np.finfo(labels.dtype).eps
-        counts = np.sum(labels, axis=0) + min_val
-        means = np.dot(labels.T, x) / counts[:, np.newaxis]
-        if start_single_cov:
-            sigmas = np.zeros((n_components, n_feat, n_feat))
-            sigma = np.cov((x - np.mean(x, axis=0)).T)
-            for i in range(n_components):
-                sigmas[i] = sigma
-                # Avoid singular matrices
-                sigmas[i].flat[:: n_feat + 1] += cov_reg
+        if initial_random:
+            sigma = np.cov((self.x - np.mean(self.x, axis=0)).T)
+            for i in range(self.n_components):
+                self.sigmas[i] = sigma
+                self.sigmas[i].flat[:: self.n_feat + 1] += 1e-6
+            if np.ndim(self.sigmas) == 1:
+                self.sigmas = (self.sigmas[:, np.newaxis])[:, np.newaxis]
         else:
-            sigmas = np.zeros((n_components, n_feat, n_feat))
-            for i in range(n_components):
-                diff = x - means[i, :]
-                sigmas[i] = np.dot(
-                    (labels[:, i][:, np.newaxis] * diff).T, diff) / counts[i]
-                # Avoid singular matrices
-                sigmas[i].flat[:: n_feat + 1] += cov_reg
-        if np.ndim(sigmas) == 1:
-            sigmas = (sigmas[:, np.newaxis])[:, np.newaxis]
-        return means, sigmas, counts
+            for i in range(self.n_components):
+                diff = self.x - self.means[i, :]
+                weighted_diff = self.posteriors[:, i][:, np.newaxis] * diff
+                self.sigmas[i] = np.dot(weighted_diff.T, diff) / self.counts[i]
+                self.priors = self.counts / len(self.x)
 
     def plots(self, it: int):
         """ Plots the scatter plots (or histograms in 1D cases) of data assignments
@@ -322,7 +326,7 @@ class ExpectationMaximization():
         if (it % self.plot_rate) == 0:
             predictions = np.argmax(self.posteriors, 1)
             if self.n_feat == 1:
-                fig, ax = plt.subplots()
+                _, ax = plt.subplots()
                 sns.histplot(
                     x=self.x[:, 0], hue=predictions, kde=False, bins=255,
                     stat='probability', ax=ax)
